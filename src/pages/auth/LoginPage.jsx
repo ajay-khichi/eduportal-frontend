@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, LogIn, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Settings2, Server } from 'lucide-react';
 import useAuth from '../../hooks/useAuth';
+import { getBaseURL } from '../../api/axiosClient';
+import toast from 'react-hot-toast';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [apiUrl, setApiUrl] = useState(() => getBaseURL());
+
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +29,18 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveApiUrl = (e) => {
+    e.preventDefault();
+    if (!apiUrl.trim()) {
+      localStorage.removeItem('eduportal_api_url');
+      toast.success('Reset to default API URL');
+    } else {
+      localStorage.setItem('eduportal_api_url', apiUrl.trim());
+      toast.success('Backend API URL saved! Re-attempting connection.');
+    }
+    setShowConfig(false);
   };
 
   return (
@@ -97,8 +114,51 @@ export function LoginPage() {
         </Link>
       </div>
 
-      <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 text-center">
-        Protected with Dual-Token Rotation & SHA-256 Hashing
+      {/* Backend API URL Config Toggle */}
+      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={() => setShowConfig((prev) => !prev)}
+          className="w-full text-center text-[11px] font-semibold text-slate-400 hover:text-indigo-500 transition flex items-center justify-center gap-1.5"
+        >
+          <Server className="w-3.5 h-3.5" />
+          API Server: <span className="font-mono text-slate-500 truncate max-w-[200px]">{getBaseURL()}</span>
+          <Settings2 className="w-3.5 h-3.5 ml-1" />
+        </button>
+
+        {showConfig && (
+          <form onSubmit={handleSaveApiUrl} className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-left">
+            <label className="block text-[10px] font-bold uppercase text-slate-500">
+              Backend API Base URL (e.g. https://api.yourdomain.com/api)
+            </label>
+            <input
+              type="text"
+              value={apiUrl}
+              onChange={(e) => setApiUrl(e.target.value)}
+              placeholder="http://localhost:8080/api or https://api.example.com/api"
+              className="w-full px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+            />
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setApiUrl('http://localhost:8080/api');
+                  localStorage.removeItem('eduportal_api_url');
+                  setShowConfig(false);
+                }}
+                className="px-2.5 py-1 text-[11px] text-slate-500 hover:text-slate-700"
+              >
+                Reset Default
+              </button>
+              <button
+                type="submit"
+                className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold"
+              >
+                Save URL
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

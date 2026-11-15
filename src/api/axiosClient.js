@@ -1,9 +1,19 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
+export function getBaseURL() {
+  const customUrl = typeof window !== 'undefined' ? localStorage.getItem('eduportal_api_url') : null;
+  if (customUrl && customUrl.trim()) {
+    return customUrl.trim().replace(/\/+$/, '');
+  }
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  return '/api';
+}
 
 const axiosClient = axios.create({
-  baseURL,
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -25,9 +35,10 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// Request interceptor: attach accessToken
+// Request interceptor: attach accessToken & dynamic baseURL
 axiosClient.interceptors.request.use(
   (config) => {
+    config.baseURL = getBaseURL();
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -77,7 +88,7 @@ axiosClient.interceptors.response.use(
       }
 
       try {
-        const refreshResponse = await axios.post(`${baseURL}/auth/refresh`, {
+        const refreshResponse = await axios.post(`${getBaseURL()}/auth/refresh`, {
           refreshToken,
         });
 
@@ -111,6 +122,10 @@ axiosClient.interceptors.response.use(
 export function getErrorMessage(error) {
   if (!error) return 'An unexpected error occurred';
   if (typeof error === 'string') return error;
+
+  if (error.response?.status === 405) {
+    return 'HTTP 405 Method Not Allowed: Request Cloudflare/Vercel static host par chali gayi. Backend API URL set karein (Settings icon se ya Cloudflare Environment Variables me VITE_API_BASE_URL add karein).';
+  }
 
   const data = error.response?.data;
   if (!data) return error.message || 'Network error occurred';
