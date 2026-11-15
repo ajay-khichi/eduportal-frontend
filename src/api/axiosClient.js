@@ -1,15 +1,17 @@
 import axios from 'axios';
 
+export const DEFAULT_API_URL = 'https://api-eduportal.ignishers.in/api';
+
 export function getBaseURL() {
   const customUrl = typeof window !== 'undefined' ? localStorage.getItem('eduportal_api_url') : null;
   if (customUrl && customUrl.trim()) {
     return customUrl.trim().replace(/\/+$/, '');
   }
   const envUrl = import.meta.env.VITE_API_BASE_URL;
-  if (envUrl && envUrl.trim()) {
+  if (envUrl && envUrl.trim() && envUrl !== '/api') {
     return envUrl.trim().replace(/\/+$/, '');
   }
-  return '/api';
+  return DEFAULT_API_URL;
 }
 
 const axiosClient = axios.create({
@@ -124,7 +126,7 @@ export function getErrorMessage(error) {
   if (typeof error === 'string') return error;
 
   if (error.response?.status === 405) {
-    return 'HTTP 405 Method Not Allowed: Request Cloudflare/Vercel static host par chali gayi. Backend API URL set karein (Settings icon se ya Cloudflare Environment Variables me VITE_API_BASE_URL add karein).';
+    return 'HTTP 405 Method Not Allowed: Request Cloudflare static host par chali gayi. Backend API URL set karein.';
   }
 
   const data = error.response?.data;
