@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Camera, CheckCircle2, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
 import { generateFaceEmbeddingFromCanvas, generateDeterministicVector } from '../../utils/faceVector';
@@ -6,6 +6,16 @@ import toast from 'react-hot-toast';
 
 export function StudentFaceVerifier({ onFaceCaptured, userEmail = 'student', isEnrollment = false }) {
   const webcamRef = useRef(null);
+
+  // Helper to stop webcam stream on unmount or when needed
+  const stopWebcamStream = () => {
+    if (webcamRef.current && webcamRef.current.video) {
+      const stream = webcamRef.current.video.srcObject;
+      if (stream && typeof stream.getTracks === 'function') {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    }
+  };
   const [capturedImage, setCapturedImage] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [cameraError, setCameraError] = useState(false);
@@ -63,6 +73,13 @@ export function StudentFaceVerifier({ onFaceCaptured, userEmail = 'student', isE
       onFaceCaptured(vector, null);
     }, 500);
   };
+
+  // Cleanup webcam stream when component unmounts
+  useEffect(() => {
+    return () => {
+      stopWebcamStream();
+    };
+  }, []);
 
   return (
     <div className="w-full flex flex-col items-center">

@@ -29,10 +29,22 @@ export function StudentQrScanner({ onScanSuccess }) {
         html5QrCodeRef.current = null;
       }
     }
+    // Ensure any lingering video tracks are stopped to free the camera
+    const videoEl = document.querySelector(`#${scannerContainerId} video`);
+    if (videoEl && videoEl.srcObject) {
+      const tracks = videoEl.srcObject.getTracks();
+      tracks.forEach((track) => track.stop());
+    }
     setScannerActive(false);
   }, []);
 
-  // Enumerate cameras on mount
+  // Cleanup scanner when component unmounts
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
     const getAvailableCameras = async () => {
@@ -148,7 +160,13 @@ export function StudentQrScanner({ onScanSuccess }) {
             msg = 'Camera access requires HTTPS or localhost.';
           }
           setCameraError(msg);
-          setScannerActive(false);
+          // Ensure any lingering video tracks are stopped to free the camera
+    const videoEl = document.querySelector(`#${scannerContainerId} video`);
+    if (videoEl && videoEl.srcObject) {
+      const tracks = videoEl.srcObject.getTracks();
+      tracks.forEach((track) => track.stop());
+    }
+    setScannerActive(false);
           setInitializing(false);
         }
       }
