@@ -67,3 +67,29 @@
 .animate-scan {
   animation: scanSweep 2s ease-in-out infinite alternate;
 }
+
+/* Fix html5-qrcode video container sizing & prevent black screen */
+#qr-reader-container {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+#qr-reader-container video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1rem !important;
+  display: block !important;
+}
+
+#qr-reader-container canvas {
+  display: none !important;
+}
+
+#qr-shaded-region {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+}
+

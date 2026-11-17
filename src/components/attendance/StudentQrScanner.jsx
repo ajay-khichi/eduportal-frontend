@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, CameraOff, Keyboard, QrCode } from 'lucide-react';
+import { Camera, CameraOff, Keyboard, RefreshCw, SwitchCamera } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function StudentQrScanner({ onScanSuccess }) {
@@ -8,9 +8,58 @@ export function StudentQrScanner({ onScanSuccess }) {
   const [manualToken, setManualToken] = useState('');
   const [scannerActive, setScannerActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [cameras, setCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
+  const [initializing, setInitializing] = useState(false);
+
   const html5QrCodeRef = useRef(null);
   const scannerContainerId = 'qr-reader-container';
 
+  // Stop current active scanner
+  const stopScanner = useCallback(async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+        html5QrCodeRef.current.clear();
+      } catch (e) {
+        // ignore cleanup error
+      } finally {
+        html5QrCodeRef.current = null;
+      }
+    }
+    setScannerActive(false);
+  }, []);
+
+  // Enumerate cameras on mount
+  useEffect(() => {
+    let isMounted = true;
+    const getAvailableCameras = async () => {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (isMounted && devices && devices.length > 0) {
+          setCameras(devices);
+          // Prefer back/rear camera on mobile
+          const backCam = devices.find((d) => {
+            const label = d.label.toLowerCase();
+            return label.includes('back') || label.includes('rear') || label.includes('environment');
+          });
+          setSelectedCameraId(backCam ? backCam.id : devices[0].id);
+        }
+      } catch (err) {
+        console.warn('Could not enumerate cameras:', err);
+      }
+    };
+
+    getAvailableCameras();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Start scanner whenever mode or selectedCameraId changes
   useEffect(() => {
     if (mode !== 'camera') {
       stopScanner();
@@ -20,79 +69,98 @@ export function StudentQrScanner({ onScanSuccess }) {
     let isMounted = true;
 
     const startScanner = async () => {
+      setInitializing(true);
+      setCameraError(null);
+
+      // Clean up previous instance first
+      await stopScanner();
+
+      // Small delay to ensure DOM container is rendered
+      await new Promise((r) => setTimeout(r, 250));
+
+      const container = document.getElementById(scannerContainerId);
+      if (!container || !isMounted) {
+        setInitializing(false);
+        return;
+      }
+
       try {
-        setCameraError(null);
         const html5QrCode = new Html5Qrcode(scannerContainerId);
         html5QrCodeRef.current = html5QrCode;
 
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
+        // Camera configuration: use selected device ID or flexible facingMode
+        const cameraConfig = selectedCameraId
+          ? selectedCameraId
+          : { facingMode: { ideal: 'environment' } };
+
+        const config = {
+          fps: 15,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const edge = Math.floor(minEdge * 0.75);
+            return { width: Math.max(edge, 180), height: Math.max(edge, 180) };
           },
+          aspectRatio: 1.0,
+          showTorchButtonIfSupported: true,
+        };
+
+        await html5QrCode.start(
+          cameraConfig,
+          config,
           (decodedText) => {
             if (isMounted) {
-              // Play gentle beep
+              // Sound notification
               try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = ctx.createOscillator();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
                 osc.connect(ctx.destination);
                 osc.start();
-                osc.stop(ctx.currentTime + 0.1);
+                osc.stop(ctx.currentTime + 0.12);
               } catch (e) {}
 
-              toast.success('QR Code Detected!');
+              toast.success('QR Code Captured!');
               stopScanner();
               onScanSuccess(decodedText);
             }
           },
-          (errorMessage) => {
-            // Ignore frame-by-frame non-detection
+          () => {
+            // Frame scanned without QR (normal operational state)
           }
         );
 
         if (isMounted) {
           setScannerActive(true);
+          setInitializing(false);
         }
       } catch (err) {
         if (isMounted) {
-          console.warn('Camera failed:', err);
-          setCameraError('Unable to access camera. Please check permissions or switch to manual input.');
+          console.error('Html5Qrcode start error:', err);
+          let msg = 'Unable to access camera.';
+          if (String(err).includes('NotAllowedError') || String(err).includes('Permission')) {
+            msg = 'Camera permission denied. Please allow camera access in browser settings.';
+          } else if (String(err).includes('NotFoundError') || String(err).includes('DevicesNotFoundError')) {
+            msg = 'No camera found on this device.';
+          } else if (String(err).includes('NotReadableError') || String(err).includes('TrackStartError')) {
+            msg = 'Camera is in use by another application or tab.';
+          } else if (window.isSecureContext === false) {
+            msg = 'Camera access requires HTTPS or localhost.';
+          }
+          setCameraError(msg);
           setScannerActive(false);
+          setInitializing(false);
         }
       }
     };
 
-    // Small delay to allow DOM element to render
-    const t = setTimeout(() => {
-      startScanner();
-    }, 200);
+    startScanner();
 
     return () => {
       isMounted = false;
-      clearTimeout(t);
       stopScanner();
     };
-  }, [mode, onScanSuccess]);
-
-  const stopScanner = () => {
-    if (html5QrCodeRef.current) {
-      if (html5QrCodeRef.current.isScanning) {
-        html5QrCodeRef.current.stop().catch(() => {}).then(() => {
-          html5QrCodeRef.current?.clear();
-          html5QrCodeRef.current = null;
-        });
-      } else {
-        html5QrCodeRef.current.clear();
-        html5QrCodeRef.current = null;
-      }
-    }
-    setScannerActive(false);
-  };
+  }, [mode, selectedCameraId, onScanSuccess, stopScanner]);
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
@@ -101,6 +169,13 @@ export function StudentQrScanner({ onScanSuccess }) {
       return;
     }
     onScanSuccess(manualToken.trim());
+  };
+
+  const switchCamera = () => {
+    if (cameras.length <= 1) return;
+    const currentIndex = cameras.findIndex((c) => c.id === selectedCameraId);
+    const nextIndex = (currentIndex + 1) % cameras.length;
+    setSelectedCameraId(cameras[nextIndex].id);
   };
 
   return (
@@ -135,27 +210,54 @@ export function StudentQrScanner({ onScanSuccess }) {
 
       {mode === 'camera' ? (
         <div className="w-full max-w-sm flex flex-col items-center">
+          {/* Camera switcher header if multiple cameras available */}
+          {cameras.length > 1 && (
+            <div className="w-full flex items-center justify-between mb-2 px-1">
+              <span className="text-[11px] text-slate-500 truncate max-w-[200px]">
+                {cameras.find((c) => c.id === selectedCameraId)?.label || 'Camera'}
+              </span>
+              <button
+                type="button"
+                onClick={switchCamera}
+                className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                <SwitchCamera className="w-3.5 h-3.5" />
+                Flip Camera
+              </button>
+            </div>
+          )}
+
           <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 border-2 border-indigo-500/50 shadow-lg">
+            {/* Html5Qrcode video mounting element */}
             <div id={scannerContainerId} className="w-full h-full" />
 
             {/* Scanning radar line overlay */}
-            {scannerActive && (
+            {scannerActive && !cameraError && (
               <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-indigo-400 to-transparent shadow-lg shadow-indigo-500/50 animate-scan pointer-events-none" />
             )}
 
+            {initializing && (
+              <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-6 text-center text-slate-400 z-10">
+                <RefreshCw className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
+                <p className="text-xs font-semibold">Starting camera feed...</p>
+              </div>
+            )}
+
             {cameraError && (
-              <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center">
+              <div className="absolute inset-0 bg-slate-900/95 flex flex-col items-center justify-center p-6 text-center z-20">
                 <CameraOff className="w-10 h-10 text-rose-500 mb-2" />
-                <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
+                <p className="text-xs text-rose-300 font-medium mb-3">{cameraError}</p>
                 <button
+                  type="button"
                   onClick={() => setMode('manual')}
-                  className="mt-4 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition"
                 >
                   Use Manual Token Instead
                 </button>
               </div>
             )}
           </div>
+
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400 text-center">
             Point your camera towards the professor's rolling screen QR code.
           </p>
@@ -170,7 +272,7 @@ export function StudentQrScanner({ onScanSuccess }) {
               rows={3}
               value={manualToken}
               onChange={(e) => setManualToken(e.target.value)}
-              placeholder="Paste or enter the token string here (e.g. from screen or clipboard)..."
+              placeholder="Paste or enter the token string here..."
               className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
