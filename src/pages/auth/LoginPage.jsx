@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, Settings2, Server } from 'lucide-react';
+import { Mail, Lock, ArrowRight } from 'lucide-react';
 import useAuth from '../../hooks/useAuth';
-import { getBaseURL } from '../../api/axiosClient';
+
 import toast from 'react-hot-toast';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
-  const [apiUrl, setApiUrl] = useState(() => getBaseURL());
+
+
 
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export function LoginPage() {
   const from = location.state?.from?.pathname || '/';
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+
     setLoading(true);
     try {
       await login(email, password);
@@ -31,9 +31,9 @@ export function LoginPage() {
     }
   };
 
-  const handleSaveApiUrl = (e) => {
-    e.preventDefault();
-    if (!apiUrl.trim()) {
+
+
+
       localStorage.removeItem('eduportal_api_url');
       toast.success('Reset to default API URL');
     } else {
@@ -114,7 +114,7 @@ export function LoginPage() {
         </Link>
       </div>
 
-      {/* Backend API URL Config Toggle */}
+
       <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
         <button
           type="button"
